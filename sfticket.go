@@ -52,7 +52,7 @@ type SFTicket struct {
 
 func GetSFTicket(category string, id int) (ticket SFTicket) {
 	var ticketResponse SFTicketResponse
-	CallAPI(path.Join(category, strconv.Itoa(id)), &ticketResponse)
+	CallSFAPI(path.Join(category, strconv.Itoa(id)), &ticketResponse)
 
 	return ticketResponse.SFTicket
 }

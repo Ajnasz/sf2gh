@@ -18,7 +18,7 @@ type SFTickets struct {
 func GetSFTickets(category string) SFTickets {
 	var tickets SFTickets
 
-	CallAPI(category, &tickets)
+	CallSFAPI(category, &tickets)
 
 	return tickets
 }

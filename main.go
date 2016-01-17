@@ -3,10 +3,15 @@ package main
 import "log"
 
 func main() {
-	sfTickets := GetSFTickets("bugs")
+	ghapi := CreateGHApi("/user/repos")
 
-	for _, ticket := range sfTickets.Tickets {
-		ticketVerb := GetSFTicket("bugs", ticket.TicketNum)
-		log.Println(ticketVerb)
-	}
+	var container interface{}
+	ghapi.Get(&container)
+	log.Println(container)
+	// sfTickets := GetSFTickets("bugs")
+
+	// for _, ticket := range sfTickets.Tickets {
+	// 	ticketVerb := GetSFTicket("bugs", ticket.TicketNum)
+	// 	log.Println(ticketVerb)
+	// }
 }
