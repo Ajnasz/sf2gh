@@ -1,49 +1,160 @@
 package main
 
 import (
-	"io"
-	"log"
-	"net/http"
+	"path"
+	"strconv"
 )
 
-type GHApi struct {
-	UserName string
-	Token    string
-	APIBase
+type GHTicket struct {
+	Assignee struct {
+		AvatarURL         string `json:"avatar_url"`
+		EventsURL         string `json:"events_url"`
+		FollowersURL      string `json:"followers_url"`
+		FollowingURL      string `json:"following_url"`
+		GistsURL          string `json:"gists_url"`
+		GravatarID        string `json:"gravatar_id"`
+		HTMLURL           string `json:"html_url"`
+		ID                int    `json:"id"`
+		Login             string `json:"login"`
+		OrganizationsURL  string `json:"organizations_url"`
+		ReceivedEventsURL string `json:"received_events_url"`
+		ReposURL          string `json:"repos_url"`
+		SiteAdmin         bool   `json:"site_admin"`
+		StarredURL        string `json:"starred_url"`
+		SubscriptionsURL  string `json:"subscriptions_url"`
+		Type              string `json:"type"`
+		URL               string `json:"url"`
+	} `json:"assignee"`
+	Body     string      `json:"body"`
+	ClosedAt interface{} `json:"closed_at"`
+	ClosedBy struct {
+		AvatarURL         string `json:"avatar_url"`
+		EventsURL         string `json:"events_url"`
+		FollowersURL      string `json:"followers_url"`
+		FollowingURL      string `json:"following_url"`
+		GistsURL          string `json:"gists_url"`
+		GravatarID        string `json:"gravatar_id"`
+		HTMLURL           string `json:"html_url"`
+		ID                int    `json:"id"`
+		Login             string `json:"login"`
+		OrganizationsURL  string `json:"organizations_url"`
+		ReceivedEventsURL string `json:"received_events_url"`
+		ReposURL          string `json:"repos_url"`
+		SiteAdmin         bool   `json:"site_admin"`
+		StarredURL        string `json:"starred_url"`
+		SubscriptionsURL  string `json:"subscriptions_url"`
+		Type              string `json:"type"`
+		URL               string `json:"url"`
+	} `json:"closed_by"`
+	Comments    int    `json:"comments"`
+	CommentsURL string `json:"comments_url"`
+	CreatedAt   string `json:"created_at"`
+	EventsURL   string `json:"events_url"`
+	HTMLURL     string `json:"html_url"`
+	ID          int    `json:"id"`
+	Labels      []struct {
+		Color string `json:"color"`
+		Name  string `json:"name"`
+		URL   string `json:"url"`
+	} `json:"labels"`
+	LabelsURL string `json:"labels_url"`
+	Locked    bool   `json:"locked"`
+	Milestone struct {
+		ClosedAt     string `json:"closed_at"`
+		ClosedIssues int    `json:"closed_issues"`
+		CreatedAt    string `json:"created_at"`
+		Creator      struct {
+			AvatarURL         string `json:"avatar_url"`
+			EventsURL         string `json:"events_url"`
+			FollowersURL      string `json:"followers_url"`
+			FollowingURL      string `json:"following_url"`
+			GistsURL          string `json:"gists_url"`
+			GravatarID        string `json:"gravatar_id"`
+			HTMLURL           string `json:"html_url"`
+			ID                int    `json:"id"`
+			Login             string `json:"login"`
+			OrganizationsURL  string `json:"organizations_url"`
+			ReceivedEventsURL string `json:"received_events_url"`
+			ReposURL          string `json:"repos_url"`
+			SiteAdmin         bool   `json:"site_admin"`
+			StarredURL        string `json:"starred_url"`
+			SubscriptionsURL  string `json:"subscriptions_url"`
+			Type              string `json:"type"`
+			URL               string `json:"url"`
+		} `json:"creator"`
+		Description string `json:"description"`
+		DueOn       string `json:"due_on"`
+		HTMLURL     string `json:"html_url"`
+		ID          int    `json:"id"`
+		LabelsURL   string `json:"labels_url"`
+		Number      int    `json:"number"`
+		OpenIssues  int    `json:"open_issues"`
+		State       string `json:"state"`
+		Title       string `json:"title"`
+		UpdatedAt   string `json:"updated_at"`
+		URL         string `json:"url"`
+	} `json:"milestone"`
+	Number      int `json:"number"`
+	PullRequest struct {
+		DiffURL  string `json:"diff_url"`
+		HTMLURL  string `json:"html_url"`
+		PatchURL string `json:"patch_url"`
+		URL      string `json:"url"`
+	} `json:"pull_request"`
+	State     string `json:"state"`
+	Title     string `json:"title"`
+	UpdatedAt string `json:"updated_at"`
+	URL       string `json:"url"`
+	User      struct {
+		AvatarURL         string `json:"avatar_url"`
+		EventsURL         string `json:"events_url"`
+		FollowersURL      string `json:"followers_url"`
+		FollowingURL      string `json:"following_url"`
+		GistsURL          string `json:"gists_url"`
+		GravatarID        string `json:"gravatar_id"`
+		HTMLURL           string `json:"html_url"`
+		ID                int    `json:"id"`
+		Login             string `json:"login"`
+		OrganizationsURL  string `json:"organizations_url"`
+		ReceivedEventsURL string `json:"received_events_url"`
+		ReposURL          string `json:"repos_url"`
+		SiteAdmin         bool   `json:"site_admin"`
+		StarredURL        string `json:"starred_url"`
+		SubscriptionsURL  string `json:"subscriptions_url"`
+		Type              string `json:"type"`
+		URL               string `json:"url"`
+	} `json:"user"`
 }
 
-func (api GHApi) NewRequest(method string, body io.Reader, container interface{}) {
-	client := &http.Client{}
-	url := api.createApiUrl()
-	req, err := http.NewRequest(method, url, body)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	req.Header.Set("Authorization", "token "+api.Token)
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-
-	log.Println(url)
-
-	res, err := client.Do(req)
-
-	handleHTTPCall(res, err, &container)
+type GHIssues struct {
+	GHApi
 }
 
-func (api GHApi) Get(container interface{}) {
-	api.NewRequest("GET", nil, container)
+type GHIssueBody struct {
+	Title     string   `json:"title,omitempty"`
+	Body      string   `json:"body,omitempty"`
+	Assignee  string   `json:"assignee,omitempty"`
+	Milestone int      `json:"milestone,omitempty"`
+	Labels    []string `json:"labels,omitempty"`
+	State     string   `json:"state,omitempty"`
 }
 
-func CreateGHApi(endPoint string) Api {
-	config := GetConfig()
+func CreateGHIssues() Api {
+	return CreateGHApi("/issues")
+}
 
-	return GHApi{
-		config.Github.UserName,
-		config.Github.AccessToken,
-		APIBase{
-			Root:     "https://api.github.com",
-			EndPoint: endPoint,
-		},
-	}
+func CreateGHUserIssues() Api {
+	return CreateGHApi("/user/issues")
+}
+
+func CreateGHRepositoryIssues(user string, repo string) GHAPI {
+	return CreateGHApi(path.Join("/repos", user, repo, "issues"))
+}
+
+func CreateGHIssue(user string, repo string) GHAPI {
+	return CreateGHApi(path.Join("/repos", user, repo, "issues"))
+}
+
+func CreateGHExistingIssue(user string, repo string, id int) GHAPI {
+	return CreateGHApi(path.Join("/repos", user, repo, "issues", strconv.Itoa(id)))
 }

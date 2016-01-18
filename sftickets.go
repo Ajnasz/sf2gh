@@ -1,5 +1,10 @@
 package main
 
+import (
+	"net/url"
+	"strconv"
+)
+
 type SFTicketResponse struct {
 	SFTicket `json:"ticket"`
 }
@@ -15,10 +20,17 @@ type SFTickets struct {
 	Tickets []SFTicketListTicket `json:"tickets"`
 }
 
-func GetSFTickets(category string) SFTickets {
+const ticketsPageLimit = 25
+
+func GetSFTickets(category string, page int) SFTickets {
 	var tickets SFTickets
 
-	CallSFAPI(category, &tickets)
+	values := url.Values{}
+
+	values.Set("page", strconv.Itoa(page))
+	values.Set("limit", strconv.Itoa(ticketsPageLimit))
+
+	CallSFAPI(category, values, &tickets)
 
 	return tickets
 }

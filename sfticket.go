@@ -37,7 +37,7 @@ type SFTicket struct {
 		Subject string `json:"subject"`
 	} `json:"discussion_thread"`
 	DiscussionThreadURL string        `json:"discussion_thread_url"`
-	Labels              []interface{} `json:"labels"`
+	Labels              []string      `json:"labels"`
 	ModDate             string        `json:"mod_date"`
 	Private             bool          `json:"private"`
 	RelatedArtifacts    []interface{} `json:"related_artifacts"`
@@ -52,7 +52,7 @@ type SFTicket struct {
 
 func GetSFTicket(category string, id int) (ticket SFTicket) {
 	var ticketResponse SFTicketResponse
-	CallSFAPI(path.Join(category, strconv.Itoa(id)), &ticketResponse)
+	CallSFAPI(path.Join(category, strconv.Itoa(id)), nil, &ticketResponse)
 
 	return ticketResponse.SFTicket
 }
