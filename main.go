@@ -22,7 +22,7 @@ var githubClient *github.Client
 
 func debug(args ...interface{}) {
 	if false {
-		log.Println(args)
+		log.Println(args...)
 	}
 }
 
