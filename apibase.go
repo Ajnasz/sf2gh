@@ -63,7 +63,7 @@ func (api APIBase) createApiUrl(params url.Values) (apiUrl string) {
 
 func (api APIBase) Get(container interface{}, params url.Values) {
 	reqUrl := api.createApiUrl(params)
-	log.Println("GET", reqUrl)
+	printf("GET", reqUrl)
 	res, err := http.Get(reqUrl)
 
 	if err != nil {

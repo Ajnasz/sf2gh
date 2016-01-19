@@ -4,15 +4,15 @@ import (
 	"net/url"
 )
 
-func CreateSFApi(endPoint string) Api {
+func CreateSFApi(project string, endPoint string) Api {
 	return APIBase{
-		Root:     "https://sourceforge.net/rest/p/fluxbox",
+		Root:     "https://sourceforge.net/rest/p/" + project,
 		EndPoint: endPoint,
 	}
 }
 
-func CallSFAPI(endPoint string, params url.Values, container interface{}) {
-	api := CreateSFApi(endPoint)
+func CallSFAPI(project string, endPoint string, params url.Values, container interface{}) {
+	api := CreateSFApi(project, endPoint)
 
 	api.Get(container, params)
 }

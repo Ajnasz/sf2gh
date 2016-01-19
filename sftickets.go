@@ -22,7 +22,7 @@ type SFTickets struct {
 
 const ticketsPageLimit = 25
 
-func GetSFTickets(category string, page int) SFTickets {
+func GetSFTickets(project string, category string, page int) SFTickets {
 	var tickets SFTickets
 
 	values := url.Values{}
@@ -30,7 +30,7 @@ func GetSFTickets(category string, page int) SFTickets {
 	values.Set("page", strconv.Itoa(page))
 	values.Set("limit", strconv.Itoa(ticketsPageLimit))
 
-	CallSFAPI(category, values, &tickets)
+	CallSFAPI(project, category, values, &tickets)
 
 	return tickets
 }
