@@ -250,7 +250,7 @@ func main() {
 	for {
 
 		printf("Get page: %d", page)
-		sfTickets := GetSFTickets(project, "bugs", page)
+		sfTickets := GetSFTickets(project, category, page)
 
 		createMilestones(&sfTickets)
 		getMilestones()
