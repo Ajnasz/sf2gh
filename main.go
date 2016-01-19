@@ -11,7 +11,11 @@ import (
 	"time"
 )
 
+// wait after each github api call
+const sleepTime time.Duration = 1500
+
 var ghRepo string
+var ghMilestones []github.Milestone
 var project string
 var config Config
 var githubClient *github.Client
@@ -22,9 +26,9 @@ func debug(args ...interface{}) {
 	}
 }
 
-func printf(args ...interface{}) {
+func printf(s string, args ...interface{}) {
 	if false {
-		log.Print(args)
+		fmt.Printf(s+"\n", args...)
 	}
 }
 
@@ -100,21 +104,35 @@ func addCommentsToIssue(sfTicket *SFTicket, issue *github.Issue) {
 
 			debug("comment", comment)
 			debug("response", response)
-			time.Sleep(time.Millisecond * 1300)
+			time.Sleep(time.Millisecond * sleepTime)
 		}
 
 		printf("Comments added: %d", len(sfTicket.DiscussionThread.Posts))
 	}
 }
 
+func findMatchingMilestone(sfTicket *SFTicket) int {
+	ms := sfTicket.CustomFields.Milestone
+
+	for _, milestone := range ghMilestones {
+		if *milestone.Title == ms {
+			return *milestone.Number
+		}
+	}
+
+	return 0
+}
+
 func sfTicketToGhIssue(sfTicket *SFTicket, category string) {
 
-	labels := getPatchLabels(append(sfTicket.Labels, category), sfTicket.Status)
+	labels := getPatchLabels(append(sfTicket.Labels, category, "sourceforge"), sfTicket.Status)
+	mileStone := findMatchingMilestone(sfTicket)
 
 	issue, response, err := githubClient.Issues.Create(config.Github.UserName, ghRepo, &github.IssueRequest{
-		Title:  &sfTicket.Summary,
-		Body:   createSFBody(sfTicket, category),
-		Labels: &labels,
+		Title:     &sfTicket.Summary,
+		Body:      createSFBody(sfTicket, category),
+		Labels:    &labels,
+		Milestone: &mileStone,
 		// Assignee: &sfTicket.AssignedTo,
 		// State: &statusText,
 	})
@@ -143,31 +161,58 @@ func sfTicketToGhIssue(sfTicket *SFTicket, category string) {
 	printf("ticket %d moved to %d\n", sfTicket.TicketNum, *issue.Number)
 }
 
-// func sfTicketToGhIssue(sfTicket SFTicket) {
-// 	var ghTicket GHTicket
+func getMilestonStatusText(milestone *SFMilestone) string {
+	if milestone.Complete {
+		return "closed"
+	}
 
-// 	debug("SF ticket data: ", sfTicket.Summary, sfTicket.TicketNum, sfTicket.Status)
+	return "open"
+}
 
-// 	ghapi := CreateGHIssue("Ajnasz", ghRepo)
+func createMilestones(sfTickets *SFTickets) {
+	debug(sfTickets.Milestones)
+	for _, milestone := range sfTickets.Milestones {
+		status := getMilestonStatusText(&milestone)
+		milestone, response, err := githubClient.Issues.CreateMilestone(config.Github.UserName, ghRepo, &github.Milestone{
+			Title:       &milestone.Name,
+			Description: &milestone.Description,
+			State:       &status,
+		})
 
-// 	ghapi.Create(GHIssueBody{
-// 		Title: sfTicket.Summary,
-// 		Body:  sfTicket.Description,
-// 		// Assignee: sfTicket.AssignedTo,
-// 		// Labels:   append(sfTicket.Labels, "bugs"),
-// 	}, &ghTicket)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-// 	ghpatcher := CreateGHExistingIssue("Ajnasz", ghRepo, ghTicket.Number)
+		if *milestone.State != status {
+			milestone, response, err = githubClient.Issues.EditMilestone(config.Github.UserName, ghRepo, *milestone.Number, &github.Milestone{
+				State: &status,
+			})
 
-// 	var editContainer GHTicket
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 
-// 	ghpatcher.Edit(GHIssueBody{
-// 		Labels: getPatchLabels(append(sfTicket.Labels, "bugs"), sfTicket.Status),
-// 		State:  getStatusText(sfTicket),
-// 	}, &editContainer)
+		debug(milestone)
+		debug(response)
+		printf("Milestone %s created", *milestone.Title)
+		time.Sleep(time.Millisecond * sleepTime)
+	}
+}
 
-// printf("ticket %d moved to %d\n", sfTicket.TicketNum, ghTicket.Number)
-// }
+func getMilestones() {
+	milestones, response, err := githubClient.Issues.ListMilestones(config.Github.UserName, ghRepo, &github.MilestoneListOptions{
+		State: "all",
+	})
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	debug(milestones)
+	debug(response)
+	ghMilestones = milestones
+}
 
 func init() {
 	ghRepo = "gh-api-test"
@@ -179,6 +224,7 @@ func init() {
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	githubClient = github.NewClient(tc)
 }
+
 func main() {
 	// ghapi := CreateGHIssue("Ajnasz", ghRepo)
 
@@ -203,8 +249,11 @@ func main() {
 
 	for {
 
-		printf("Get page: %d", page, progress)
+		printf("Get page: %d", page)
 		sfTickets := GetSFTickets(project, "bugs", page)
+
+		createMilestones(&sfTickets)
+		getMilestones()
 
 		if progress == nil {
 			progress = pb.StartNew(sfTickets.Count)
@@ -220,7 +269,7 @@ func main() {
 			sfTicketToGhIssue(&ticketVerb, category)
 			progress.Increment()
 
-			time.Sleep(time.Millisecond * 1300)
+			time.Sleep(time.Millisecond * sleepTime)
 		}
 
 		page += 1

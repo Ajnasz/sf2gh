@@ -27,8 +27,8 @@ type SFTicket struct {
 	Attachments  []SFTicketAttachment `json:"attachments"`
 	CreatedDate  string               `json:"created_date"`
 	CustomFields struct {
-		_milestone string `json:"_milestone"`
-		_priority  string `json:"_priority"`
+		Milestone string `json:"_milestone"`
+		_priority string `json:"_priority"`
 	} `json:"custom_fields"`
 	Description        string `json:"description"`
 	DiscussionDisabled bool   `json:"discussion_disabled"`
