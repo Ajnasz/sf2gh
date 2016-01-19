@@ -35,7 +35,13 @@ func printf(s string, args ...interface{}) {
 func getPatchLabels(currentLabels []string, status string) []string {
 	statusLabels := strings.Split(status, "-")
 
-	return append(currentLabels, statusLabels[1:]...)
+	newLabel := strings.Join(statusLabels[1:], "-")
+
+	if newLabel != "" {
+		return append(currentLabels, newLabel)
+	} else {
+		return currentLabels
+	}
 }
 
 func getStatusText(ticket *SFTicket) string {
@@ -226,25 +232,10 @@ func init() {
 }
 
 func main() {
-	// ghapi := CreateGHIssue("Ajnasz", ghRepo)
-
-	// var container interface{}
-	// ghapi.Create(GHIssueBody{
-	// 	Title:    "Test ticket title",
-	// 	Body:     "Test ticket body",
-	// 	Assignee: "Ajnasz",
-	// 	Labels: []string{
-	// 		"foo",
-	// 		"bar",
-	// 		"baz",
-	// 	},
-	// }, &container)
-	// debug(container)
-
-	page := 0
 
 	var progress *pb.ProgressBar
 
+	page := 0
 	category := "bugs"
 
 	for {
@@ -252,15 +243,17 @@ func main() {
 		printf("Get page: %d", page)
 		sfTickets := GetSFTickets(project, category, page)
 
-		createMilestones(&sfTickets)
-		getMilestones()
+		if ghMilestones == nil {
+			createMilestones(&sfTickets)
+			getMilestones()
+		}
 
 		if progress == nil {
 			progress = pb.StartNew(sfTickets.Count)
 		}
 
 		if len(sfTickets.Tickets) == 0 {
-			return
+			break
 		}
 
 		for _, ticket := range sfTickets.Tickets {
