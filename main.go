@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/cheggaaa/pb"
 	"github.com/google/go-github/github"
+	"gitlab.com/ajnasz/sfapi"
 	"golang.org/x/oauth2"
 	"log"
 	"strings"
@@ -19,6 +20,7 @@ var ghMilestones []github.Milestone
 var project string
 var config Config
 var githubClient *github.Client
+var sfClient *sfapi.Client
 
 func debug(args ...interface{}) {
 	if false {
@@ -44,7 +46,7 @@ func getPatchLabels(currentLabels []string, status string) []string {
 	}
 }
 
-func getStatusText(ticket *SFTicket) string {
+func getStatusText(ticket *sfapi.Ticket) string {
 	if strings.Split(ticket.Status, "-")[0] == "closed" {
 		debug("Status closed")
 		return "closed"
@@ -54,16 +56,16 @@ func getStatusText(ticket *SFTicket) string {
 	}
 }
 
-func createSFBody(sfTicket *SFTicket, category string) *string {
+func createSFBody(ticket *sfapi.Ticket, category string) *string {
 	importText := fmt.Sprintf("Imported from SourceForge on %s", time.Now().Format(time.UnixDate))
-	createdText := fmt.Sprintf("Created by **%s** on %s", sfTicket.ReportedBy, sfTicket.CreatedDate)
-	link := fmt.Sprintf("Original: http://sourceforge.net/p/%s/%s/%d", project, category, sfTicket.TicketNum)
-	body := fmt.Sprintf("%s\n%s\n%s\n\n%s", importText, createdText, link, sfTicket.Description)
+	createdText := fmt.Sprintf("Created by **%s** on %s", ticket.ReportedBy, ticket.CreatedDate)
+	link := fmt.Sprintf("Original: http://sourceforge.net/p/%s/%s/%d", project, category, ticket.TicketNum)
+	body := fmt.Sprintf("%s\n%s\n%s\n\n%s", importText, createdText, link, ticket.Description)
 
-	if len(sfTicket.Attachments) > 0 {
+	if len(ticket.Attachments) > 0 {
 		attachments := []string{}
 
-		for _, attachment := range sfTicket.Attachments {
+		for _, attachment := range ticket.Attachments {
 			attachments = append(attachments, attachment.URL)
 		}
 
@@ -73,11 +75,11 @@ func createSFBody(sfTicket *SFTicket, category string) *string {
 	return &body
 }
 
-func createSFCommentBody(post *SFDiscussionPost, sfTicket *SFTicket) *string {
+func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) *string {
 	createdText := fmt.Sprintf("Created by **%s** on %s", post.Author, post.Timestamp)
 	var body string
 
-	if post.Subject != fmt.Sprintf("#%d %s", sfTicket.TicketNum, sfTicket.Summary) {
+	if post.Subject != fmt.Sprintf("#%d %s", ticket.TicketNum, ticket.Summary) {
 		body = fmt.Sprintf("*%s*\n\n%s\n\n%s", post.Subject, createdText, post.Text)
 	} else {
 		body = fmt.Sprintf("%s\n\n%s", createdText, post.Text)
@@ -96,12 +98,12 @@ func createSFCommentBody(post *SFDiscussionPost, sfTicket *SFTicket) *string {
 	return &body
 }
 
-func addCommentsToIssue(sfTicket *SFTicket, issue *github.Issue) {
+func addCommentsToIssue(ticket *sfapi.Ticket, issue *github.Issue) {
 
-	if len(sfTicket.DiscussionThread.Posts) > 0 {
-		for _, post := range sfTicket.DiscussionThread.Posts {
+	if len(ticket.DiscussionThread.Posts) > 0 {
+		for _, post := range ticket.DiscussionThread.Posts {
 			comment, response, err := githubClient.Issues.CreateComment(config.Github.UserName, ghRepo, *issue.Number, &github.IssueComment{
-				Body: createSFCommentBody(&post, sfTicket),
+				Body: createSFCommentBody(&post, ticket),
 			})
 
 			if err != nil {
@@ -113,12 +115,12 @@ func addCommentsToIssue(sfTicket *SFTicket, issue *github.Issue) {
 			time.Sleep(time.Millisecond * sleepTime)
 		}
 
-		printf("Comments added: %d", len(sfTicket.DiscussionThread.Posts))
+		printf("Comments added: %d", len(ticket.DiscussionThread.Posts))
 	}
 }
 
-func findMatchingMilestone(sfTicket *SFTicket) int {
-	ms := sfTicket.CustomFields.Milestone
+func findMatchingMilestone(ticket *sfapi.Ticket) int {
+	ms := ticket.CustomFields.Milestone
 
 	for _, milestone := range ghMilestones {
 		if *milestone.Title == ms {
@@ -129,25 +131,30 @@ func findMatchingMilestone(sfTicket *SFTicket) int {
 	return 0
 }
 
-func sfTicketToGhIssue(sfTicket *SFTicket, category string) {
+func sfTicketToGhIssue(ticket *sfapi.Ticket, category string) {
 
-	labels := getPatchLabels(append(sfTicket.Labels, category, "sourceforge"), sfTicket.Status)
-	mileStone := findMatchingMilestone(sfTicket)
+	labels := getPatchLabels(append(ticket.Labels, category, "sourceforge"), ticket.Status)
+	mileStone := findMatchingMilestone(ticket)
 
-	issue, response, err := githubClient.Issues.Create(config.Github.UserName, ghRepo, &github.IssueRequest{
-		Title:     &sfTicket.Summary,
-		Body:      createSFBody(sfTicket, category),
-		Labels:    &labels,
-		Milestone: &mileStone,
-		// Assignee: &sfTicket.AssignedTo,
+	issueRequest := github.IssueRequest{
+		Title:  &ticket.Summary,
+		Body:   createSFBody(ticket, category),
+		Labels: &labels,
+		// Assignee: &ticket.AssignedTo,
 		// State: &statusText,
-	})
+	}
+
+	if mileStone > 0 {
+		issueRequest.Milestone = &mileStone
+	}
+
+	issue, response, err := githubClient.Issues.Create(config.Github.UserName, ghRepo, &issueRequest)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	statusText := getStatusText(sfTicket)
+	statusText := getStatusText(ticket)
 
 	if statusText != *issue.State {
 		issue, response, err = githubClient.Issues.Edit(config.Github.UserName, ghRepo, *issue.Number, &github.IssueRequest{
@@ -160,14 +167,14 @@ func sfTicketToGhIssue(sfTicket *SFTicket, category string) {
 
 	}
 
-	addCommentsToIssue(sfTicket, issue)
+	addCommentsToIssue(ticket, issue)
 
 	debug("response", response)
 	debug("issue", issue)
-	printf("ticket %d moved to %d\n", sfTicket.TicketNum, *issue.Number)
+	printf("ticket %d moved to %d\n", ticket.TicketNum, *issue.Number)
 }
 
-func getMilestonStatusText(milestone *SFMilestone) string {
+func getMilestonStatusText(milestone *sfapi.Milestone) string {
 	if milestone.Complete {
 		return "closed"
 	}
@@ -175,9 +182,11 @@ func getMilestonStatusText(milestone *SFMilestone) string {
 	return "open"
 }
 
-func createMilestones(sfTickets *SFTickets) {
-	debug(sfTickets.Milestones)
-	for _, milestone := range sfTickets.Milestones {
+func createMilestones(tickets *sfapi.TrackerInfo) {
+	log.Println("Creating milestones")
+
+	progress := pb.StartNew(len(tickets.Milestones))
+	for _, milestone := range tickets.Milestones {
 		status := getMilestonStatusText(&milestone)
 		milestone, response, err := githubClient.Issues.CreateMilestone(config.Github.UserName, ghRepo, &github.Milestone{
 			Title:       &milestone.Name,
@@ -186,7 +195,8 @@ func createMilestones(sfTickets *SFTickets) {
 		})
 
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			continue
 		}
 
 		if *milestone.State != status {
@@ -201,9 +211,14 @@ func createMilestones(sfTickets *SFTickets) {
 
 		debug(milestone)
 		debug(response)
+
 		printf("Milestone %s created", *milestone.Title)
+
+		progress.Increment()
+
 		time.Sleep(time.Millisecond * sleepTime)
 	}
+	progress.FinishPrint("Milestones created")
 }
 
 func getMilestones() {
@@ -229,6 +244,8 @@ func init() {
 	)
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	githubClient = github.NewClient(tc)
+
+	sfClient = sfapi.NewClient(nil, project)
 }
 
 func main() {
@@ -241,27 +258,36 @@ func main() {
 	for {
 
 		printf("Get page: %d", page)
-		sfTickets := GetSFTickets(project, category, page)
+		tickets, _, err := sfClient.Tracker.Info(category)
+
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		if ghMilestones == nil {
-			createMilestones(&sfTickets)
+			createMilestones(tickets)
 			getMilestones()
 		}
 
 		if progress == nil {
-			progress = pb.StartNew(sfTickets.Count)
+			log.Println("Creating tickets")
+			progress = pb.StartNew(tickets.Count)
 		}
 
-		if len(sfTickets.Tickets) == 0 {
+		if len(tickets.Tickets) == 0 {
 			break
 		}
 
-		for _, ticket := range sfTickets.Tickets {
-			ticketVerb := GetSFTicket(project, category, ticket.TicketNum)
+		for _, ticket := range tickets.Tickets {
+			ticket, _, err := sfClient.Tracker.Get(category, ticket.TicketNum)
 
-			sfTicketToGhIssue(&ticketVerb, category)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			sfTicketToGhIssue(ticket, category)
+
 			progress.Increment()
-
 			time.Sleep(time.Millisecond * sleepTime)
 		}
 
