@@ -3,9 +3,9 @@ package main
 import (
 	// "fmt"
 	"fmt"
+	"github.com/Ajnasz/sfapi"
 	"github.com/cheggaaa/pb"
 	"github.com/google/go-github/github"
-	"gitlab.com/ajnasz/sfapi"
 	"golang.org/x/oauth2"
 	"log"
 	"strings"
