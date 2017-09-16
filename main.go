@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/Ajnasz/config-validator"
 	"github.com/Ajnasz/sfapi"
 	"github.com/cheggaaa/pb"
 	"github.com/google/go-github/github"
@@ -15,20 +16,17 @@ import (
 
 // wait after each github api call
 var _sleepTime int
-var sleepTime time.Duration
 
-var flagDebug bool
+var cliConfig CliConfig
 
 var ctx context.Context
-var ghRepo string
 var ghMilestones []*github.Milestone
-var project string
 var config Config
 var githubClient *github.Client
 var sfClient *sfapi.Client
 
 func debug(args ...interface{}) {
-	if flagDebug {
+	if cliConfig.debug {
 		log.Println(args...)
 	}
 }
@@ -68,7 +66,7 @@ func getStatusText(ticket *sfapi.Ticket) string {
 func createSFBody(ticket *sfapi.Ticket, category string) *string {
 	importText := fmt.Sprintf("Imported from SourceForge on %s", time.Now().Format(time.UnixDate))
 	createdText := fmt.Sprintf("Created by **%s** on %s", ticket.ReportedBy, ticket.CreatedDate)
-	link := fmt.Sprintf("Original: http://sourceforge.net/p/%s/%s/%d", project, category, ticket.TicketNum)
+	link := fmt.Sprintf("Original: http://sourceforge.net/p/%s/%s/%d", cliConfig.project, category, ticket.TicketNum)
 	body := fmt.Sprintf("%s\n%s\n%s\n\n%s", importText, createdText, link, ticket.Description)
 
 	if len(ticket.Attachments) > 0 {
@@ -111,7 +109,7 @@ func addCommentsToIssue(ticket *sfapi.Ticket, issue *github.Issue) {
 	if len(ticket.DiscussionThread.Posts) > 0 {
 		progress := pb.StartNew(len(ticket.DiscussionThread.Posts))
 		for _, post := range ticket.DiscussionThread.Posts {
-			comment, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, ghRepo, *issue.Number, &github.IssueComment{
+			comment, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
 				Body: createSFCommentBody(&post, ticket),
 			})
 
@@ -126,7 +124,7 @@ func addCommentsToIssue(ticket *sfapi.Ticket, issue *github.Issue) {
 			debug("comment", comment)
 			debug("response", response)
 			progress.Increment()
-			time.Sleep(time.Millisecond * sleepTime)
+			time.Sleep(time.Millisecond * cliConfig.sleepTime)
 		}
 
 		progress.FinishPrint(fmt.Sprintf("%d comments imported into #%d", len(ticket.DiscussionThread.Posts), *issue.Number))
@@ -162,7 +160,7 @@ func sfTicketToGhIssue(ticket *sfapi.Ticket, category string, prog chan Progress
 		issueRequest.Milestone = &mileStone
 	}
 
-	issue, response, err := githubClient.Issues.Create(ctx, config.Github.UserName, ghRepo, &issueRequest)
+	issue, response, err := githubClient.Issues.Create(ctx, config.Github.UserName, cliConfig.ghRepo, &issueRequest)
 
 	if err != nil {
 		if _, ok := err.(*github.RateLimitError); ok {
@@ -175,7 +173,7 @@ func sfTicketToGhIssue(ticket *sfapi.Ticket, category string, prog chan Progress
 	statusText := getStatusText(ticket)
 
 	if statusText != *issue.State {
-		issue, response, err = githubClient.Issues.Edit(ctx, config.Github.UserName, ghRepo, *issue.Number, &github.IssueRequest{
+		issue, response, err = githubClient.Issues.Edit(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueRequest{
 			State: &statusText,
 		})
 
@@ -211,7 +209,7 @@ func createMilestones(tickets *sfapi.TrackerInfo) {
 	progress := pb.StartNew(len(tickets.Milestones))
 	for _, milestone := range tickets.Milestones {
 		status := getMilestonStatusText(&milestone)
-		milestone, response, err := githubClient.Issues.CreateMilestone(ctx, config.Github.UserName, ghRepo, &github.Milestone{
+		milestone, response, err := githubClient.Issues.CreateMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, &github.Milestone{
 			Title:       &milestone.Name,
 			Description: &milestone.Description,
 			State:       &status,
@@ -227,7 +225,7 @@ func createMilestones(tickets *sfapi.TrackerInfo) {
 		}
 
 		if *milestone.State != status {
-			milestone, response, err = githubClient.Issues.EditMilestone(ctx, config.Github.UserName, ghRepo, *milestone.Number, &github.Milestone{
+			milestone, response, err = githubClient.Issues.EditMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, *milestone.Number, &github.Milestone{
 				State: &status,
 			})
 
@@ -247,14 +245,14 @@ func createMilestones(tickets *sfapi.TrackerInfo) {
 
 		progress.Increment()
 
-		time.Sleep(time.Millisecond * sleepTime)
+		time.Sleep(time.Millisecond * cliConfig.sleepTime)
 	}
 
 	progress.FinishPrint("Milestones created")
 }
 
 func getMilestones() {
-	milestones, response, err := githubClient.Issues.ListMilestones(ctx, config.Github.UserName, ghRepo, &github.MilestoneListOptions{
+	milestones, response, err := githubClient.Issues.ListMilestones(ctx, config.Github.UserName, cliConfig.ghRepo, &github.MilestoneListOptions{
 		State: "all",
 	})
 
@@ -281,22 +279,22 @@ func getFullSfTicket(category string, info sfapi.TrackerInfoTicket) (*sfapi.Tick
 type ProgressItem struct{}
 
 func init() {
-	flag.BoolVar(&flagDebug, "debug", false, "Debug")
+	flag.BoolVar(&cliConfig.debug, "debug", false, "Debug")
 	flag.IntVar(&_sleepTime, "sleepTime", 1550, "Sleep between api calls, github may stop you use the API if you call it too frequently")
-	flag.StringVar(&ghRepo, "ghRepo", "", "Github repository name")
-	flag.StringVar(&project, "sfProject", "", "Sourceforge project")
+	flag.StringVar(&cliConfig.ghRepo, "ghRepo", "", "Github repository name")
+	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
 	flag.Parse()
 
-	sleepTime = time.Duration(_sleepTime)
+	cliConfig.sleepTime = time.Duration(_sleepTime)
+
+	err := configValidator.Validate(cliConfig)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func init() {
-	if ghRepo == "" {
-		log.Fatal("ghRepo required")
-	}
-	if project == "" {
-		log.Fatal("sfProject required")
-	}
 	config = GetConfig()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.Github.AccessToken},
@@ -304,7 +302,7 @@ func init() {
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	githubClient = github.NewClient(tc)
 
-	sfClient = sfapi.NewClient(nil, project)
+	sfClient = sfapi.NewClient(nil, cliConfig.project)
 }
 
 func main() {
@@ -355,7 +353,7 @@ func main() {
 			// }
 
 			progress.Increment()
-			time.Sleep(time.Millisecond * sleepTime)
+			time.Sleep(time.Millisecond * cliConfig.sleepTime)
 		}
 
 		page++

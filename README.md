@@ -24,18 +24,18 @@ set the accessToken to the one you generated.
 Create the github repository where you want to move the sourceforge tickets to. ( https://github.com/new )
 
 ```sh
-./sf2gh -ghRepo github-repo-name -sfProject sf-project-name
+./sf2gh -ghRepo github-repo-name -project sf-project-name
 ```
 
 For example to move fluxbox tickets to your fluxbox github repo:
 
 ```sh
-./sf2gh -ghRepo fluxbox -sfProject fluxbox
+./sf2gh -ghRepo fluxbox -project fluxbox
 ```
 
 ### Available options
 
  - ghRepo: Github repository name (required)
- - sfProject: Sourceforge project name (required)
+ - project: Sourceforge project name (required)
  - sleepTime: Sleep between api calls in milliseconds. Github may stop you use the API if you call it too frequently (optional)
  - debug: Enable debug messages (optional)
