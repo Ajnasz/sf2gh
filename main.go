@@ -4,41 +4,38 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/Ajnasz/config-validator"
 	"github.com/Ajnasz/sfapi"
-	"github.com/cheggaaa/pb"
-	"github.com/google/go-github/github"
+	"github.com/cheggaaa/pb/v3"
+	"github.com/google/go-github/v32/github"
 	"golang.org/x/oauth2"
-	"log"
-	"strings"
-	"time"
+	"modernc.org/kv"
 )
+
+const dbFile = "progressDB"
 
 // wait after each github api call
 var _sleepTime int
 
 var cliConfig CliConfig
 
-var ctx context.Context
 var ghMilestones []*github.Milestone
 var config Config
 var githubClient *github.Client
 var sfClient *sfapi.Client
-
-func debug(args ...interface{}) {
-	if cliConfig.debug {
-		log.Println(args...)
-	}
-}
-
-func printf(s string, args ...interface{}) {
-	fmt.Printf(s+"\n", args...)
-}
+var stopped bool
 
 func sleepTillRateLimitReset(rate github.Rate) {
 	if rate.Reset.After(time.Now()) {
 		wait := rate.Reset.Sub(time.Now())
-		print("sleeping", wait)
+		log.Println("rate limit reached, waiting", wait)
 		time.Sleep(wait)
 	}
 }
@@ -56,10 +53,8 @@ func getPatchLabels(currentLabels []string, status string) []string {
 
 func getStatusText(ticket *sfapi.Ticket) string {
 	if strings.Split(ticket.Status, "-")[0] == "closed" {
-		debug("Status closed")
 		return "closed"
 	}
-	debug("Status open")
 	return "open"
 }
 
@@ -105,30 +100,42 @@ func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) *stri
 	return &body
 }
 
-func addCommentsToIssue(ticket *sfapi.Ticket, issue *github.Issue) {
-	if len(ticket.DiscussionThread.Posts) > 0 {
-		progress := pb.StartNew(len(ticket.DiscussionThread.Posts))
-		for _, post := range ticket.DiscussionThread.Posts {
-			comment, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
-				Body: createSFCommentBody(&post, ticket),
-			})
+func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) error {
+	_, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
+		Body: createSFCommentBody(&post, ticket),
+	})
 
-			if err != nil {
-				if _, ok := err.(*github.RateLimitError); ok {
-					sleepTillRateLimitReset(response.Rate)
-				} else {
-					log.Fatal(err)
-				}
+	if err != nil {
+		if _, ok := err.(*github.RateLimitError); ok {
+			sleepTillRateLimitReset(response.Rate)
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+func addCommentsToIssue(ctx context.Context, progressDB ProgressState, ticket *sfapi.Ticket, issue *github.Issue) error {
+	if len(ticket.DiscussionThread.Posts) > 0 {
+		for _, post := range ticket.DiscussionThread.Posts {
+			if stopped {
+				return nil
+			}
+			if _, found, _ := progressDB.Get("comment", post.Slug); found {
+				// fmt.Println("Skip creating comment")
+				continue
 			}
 
-			debug("comment", comment)
-			debug("response", response)
-			progress.Increment()
+			err := addCommentToIssue(ctx, post, ticket, issue)
+
+			if err != nil {
+				return err
+			}
 			time.Sleep(time.Millisecond * cliConfig.sleepTime)
 		}
-
-		progress.FinishPrint(fmt.Sprintf("%d comments imported into #%d", len(ticket.DiscussionThread.Posts), *issue.Number))
 	}
+
+	return nil
 }
 
 func findMatchingMilestone(ticket *sfapi.Ticket) int {
@@ -143,7 +150,23 @@ func findMatchingMilestone(ticket *sfapi.Ticket) int {
 	return 0
 }
 
-func sfTicketToGhIssue(ticket *sfapi.Ticket, category string, prog chan ProgressItem) {
+func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sfapi.Ticket, category string) (*github.Issue, error) {
+
+	issueNumber, found, err := progressDB.Get("issue", ticket.ID)
+
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		// fmt.Println("Issue exists, querying")
+		issue, _, err := githubClient.Issues.Get(ctx, config.Github.UserName, cliConfig.ghRepo, int(issueNumber))
+
+		if err != nil {
+			return nil, err
+		}
+
+		return issue, nil
+	}
 
 	labels := getPatchLabels(append(ticket.Labels, category, "sourceforge"), ticket.Status)
 	mileStone := findMatchingMilestone(ticket)
@@ -166,7 +189,7 @@ func sfTicketToGhIssue(ticket *sfapi.Ticket, category string, prog chan Progress
 		if _, ok := err.(*github.RateLimitError); ok {
 			sleepTillRateLimitReset(response.Rate)
 		} else {
-			log.Fatal(err)
+			return nil, err
 		}
 	}
 
@@ -181,18 +204,14 @@ func sfTicketToGhIssue(ticket *sfapi.Ticket, category string, prog chan Progress
 			if _, ok := err.(*github.RateLimitError); ok {
 				sleepTillRateLimitReset(response.Rate)
 			} else {
-				log.Fatal(err)
+				return nil, err
 			}
 		}
 
 	}
 
-	printf("ticket %d moved to #%d\n", ticket.TicketNum, *issue.Number)
-	debug("Rate limit status %v", response.Rate)
-	debug("response", response)
-	debug("issue", issue)
-	addCommentsToIssue(ticket, issue)
-	// prog <- 1
+	progressDB.Set("issue", ticket.ID, uint64(*issue.Number))
+	return issue, nil
 }
 
 func getMilestonStatusText(milestone *sfapi.Milestone) string {
@@ -203,55 +222,74 @@ func getMilestonStatusText(milestone *sfapi.Milestone) string {
 	return "open"
 }
 
-func createMilestones(tickets *sfapi.TrackerInfo) {
-	log.Println("Creating milestones")
+func isAlreadyExistError(respError *github.ErrorResponse) bool {
+	return len(respError.Errors) == 1 && respError.Errors[0].Code == "already_exists"
+}
 
-	progress := pb.StartNew(len(tickets.Milestones))
-	for _, milestone := range tickets.Milestones {
-		status := getMilestonStatusText(&milestone)
-		milestone, response, err := githubClient.Issues.CreateMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, &github.Milestone{
-			Title:       &milestone.Name,
-			Description: &milestone.Description,
-			State:       &status,
+func createMileStone(ctx context.Context, progressDB ProgressState, ms sfapi.Milestone) error {
+	progressDB.Get("milestone", ms.Name)
+	if _, found, _ := progressDB.Get("milestone", ms.Name); found {
+		return nil
+	}
+
+	status := getMilestonStatusText(&ms)
+	milestone, response, err := githubClient.Issues.CreateMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, &github.Milestone{
+		Title:       &ms.Name,
+		Description: &ms.Description,
+		State:       &status,
+	})
+
+	if err != nil {
+		if errResp, ok := err.(*github.ErrorResponse); ok && isAlreadyExistError(errResp) {
+			return nil
+		}
+		if _, ok := err.(*github.RateLimitError); ok {
+			sleepTillRateLimitReset(response.Rate)
+		} else {
+			return err
+		}
+	}
+
+	if *milestone.State != status {
+		milestone, response, err = githubClient.Issues.EditMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, *milestone.Number, &github.Milestone{
+			State: &status,
 		})
 
 		if err != nil {
 			if _, ok := err.(*github.RateLimitError); ok {
 				sleepTillRateLimitReset(response.Rate)
 			} else {
-				log.Println(err)
-				continue
+				return err
 			}
 		}
+	}
 
-		if *milestone.State != status {
-			milestone, response, err = githubClient.Issues.EditMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, *milestone.Number, &github.Milestone{
-				State: &status,
-			})
+	progressDB.Set("milestone", fmt.Sprint(*milestone.ID), uint64(*milestone.Number))
+	return nil
+}
 
-			if err != nil {
-				if _, ok := err.(*github.RateLimitError); ok {
-					sleepTillRateLimitReset(response.Rate)
-				} else {
-					log.Fatal(err)
-				}
-			}
+func createMilestones(ctx context.Context, progressDB ProgressState, tickets *sfapi.TrackerInfo) error {
+	log.Println("Creating milestones")
+
+	progress := pb.StartNew(len(tickets.Milestones))
+	for _, ms := range tickets.Milestones {
+		if stopped {
+			return nil
 		}
-
-		debug(milestone)
-		debug(response)
-
-		printf("Milestone %s created", *milestone.Title)
-
+		if err := createMileStone(ctx, progressDB, ms); err != nil {
+			progress.Finish()
+			return err
+		}
 		progress.Increment()
 
 		time.Sleep(time.Millisecond * cliConfig.sleepTime)
 	}
 
-	progress.FinishPrint("Milestones created")
+	progress.Finish()
+	return nil
 }
 
-func getMilestones() {
+func getMilestones(ctx context.Context) error {
 	milestones, response, err := githubClient.Issues.ListMilestones(ctx, config.Github.UserName, cliConfig.ghRepo, &github.MilestoneListOptions{
 		State: "all",
 	})
@@ -260,13 +298,12 @@ func getMilestones() {
 		if _, ok := err.(*github.RateLimitError); ok {
 			sleepTillRateLimitReset(response.Rate)
 		} else {
-			log.Fatal(err)
+			return err
 		}
 	}
 
-	debug(milestones)
-	debug(response)
 	ghMilestones = milestones
+	return nil
 }
 
 func getFullSfTicket(category string, info sfapi.TrackerInfoTicket) (*sfapi.Ticket, error) {
@@ -279,7 +316,6 @@ func getFullSfTicket(category string, info sfapi.TrackerInfoTicket) (*sfapi.Tick
 type ProgressItem struct{}
 
 func init() {
-	flag.BoolVar(&cliConfig.debug, "debug", false, "Debug")
 	flag.IntVar(&_sleepTime, "sleepTime", 1550, "Sleep between api calls, github may stop you use the API if you call it too frequently")
 	flag.StringVar(&cliConfig.ghRepo, "ghRepo", "", "Github repository name")
 	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
@@ -294,70 +330,141 @@ func init() {
 	}
 }
 
-func init() {
+func getDB(dbFile string, opts *kv.Options) (*kv.DB, error) {
+	createOpen := kv.Open
+	status := "opening"
+
+	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
+		createOpen = kv.Create
+		status = "creating"
+	}
+
+	if opts == nil {
+		opts = &kv.Options{}
+	}
+
+	db, err := createOpen(dbFile, opts)
+
+	if err != nil {
+		return nil, fmt.Errorf("error %s %s: %v", status, dbFile, err)
+	}
+
+	return db, nil
+}
+
+func createTicket(ctx context.Context, progressDB ProgressState, category string, tk sfapi.TrackerInfoTicket) error {
+	ticket, err := getFullSfTicket(category, tk)
+
+	if err != nil {
+		return err
+	}
+
+	issue, err := sfTicketToGhIssue(ctx, progressDB, ticket, category)
+	if err != nil {
+		return err
+	}
+	err = addCommentsToIssue(ctx, progressDB, ticket, issue)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func createTickets(ctx context.Context, progressDB ProgressState, tickets *sfapi.TrackerInfo, category string) (bool, error) {
+	if len(tickets.Tickets) == 0 {
+		return false, nil
+	}
+	progress := pb.StartNew(len(tickets.Tickets))
+	log.Println(fmt.Sprintf("Creating tickets %d of %d", len(tickets.Tickets)+tickets.Page*tickets.Limit, tickets.Count))
+	for _, ticket := range tickets.Tickets {
+		if stopped {
+			return false, nil
+		}
+		createTicket(ctx, progressDB, category, ticket)
+		progress.Increment()
+		time.Sleep(time.Millisecond * cliConfig.sleepTime)
+	}
+
+	progress.Finish()
+
+	return true, nil
+}
+
+func doMigration(category string, progressDB ProgressState) {
+	ctx := context.Background()
+	var page int
+	var limit int
+	query := sfapi.NewRequestQuery()
+	query.Limit = 100
+	for {
+		if stopped {
+			return
+		}
+		query.Page = page
+		tickets, _, err := sfClient.Tracker.Info(category, *query)
+		page = tickets.Page
+		limit = tickets.Limit
+
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		if ghMilestones == nil {
+			err = createMilestones(ctx, progressDB, tickets)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			err = getMilestones(ctx)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		}
+
+		if ok, err := createTickets(ctx, progressDB, tickets, category); !ok {
+			if err != nil {
+				log.Println(err)
+			}
+		}
+
+		if page*limit+limit >= tickets.Count {
+			break
+		}
+
+		page++
+	}
+}
+
+func main() {
 	config = GetConfig()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.Github.AccessToken},
 	)
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
+
 	githubClient = github.NewClient(tc)
 
 	sfClient = sfapi.NewClient(nil, cliConfig.project)
-}
 
-func main() {
-
-	var progress *pb.ProgressBar
-
-	page := 0
-	category := "bugs"
-
-	ctx = context.Background()
-	progChan := make(chan ProgressItem)
-
-	for {
-
-		printf("Get page: %d", page)
-		tickets, _, err := sfClient.Tracker.Info(category)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if ghMilestones == nil {
-			createMilestones(tickets)
-			getMilestones()
-		}
-
-		if progress == nil {
-			log.Println("Creating tickets")
-			progress = pb.StartNew(tickets.Count)
-		}
-
-		if len(tickets.Tickets) == 0 {
-			break
-		}
-
-		for _, ticket := range tickets.Tickets {
-			ticket, err := getFullSfTicket(category, ticket)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			sfTicketToGhIssue(ticket, category, progChan)
-
-			// select {
-			// case i := <-progChan:
-			// 	fmt.Println(i)
-			// }
-
-			progress.Increment()
-			time.Sleep(time.Millisecond * cliConfig.sleepTime)
-		}
-
-		page++
+	progressDB, err := CreateKVProgressState(dbFile)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	progress.FinishPrint("All tickets imported")
+	defer progressDB.Close()
+	category := "bugs"
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT)
+
+	go func() {
+		<-signalChan
+		stopped = true
+		fmt.Println("Exiting")
+	}()
+	doMigration(category, progressDB)
 }
