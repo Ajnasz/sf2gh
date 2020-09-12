@@ -438,6 +438,7 @@ func init() {
 	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
 	flag.StringVar(&cliConfig.ticketTemplate, "ticketTemplate", "", "Template file for a ticket")
 	flag.StringVar(&cliConfig.commentTemplate, "commentTemplate", "", "Template file for a comments")
+	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category")
 }
 
 func getTemplateString(defaultTemplate string, templateFileName string) (string, error) {
@@ -471,7 +472,7 @@ func main() {
 
 	sfClient = sfapi.NewClient(nil, cliConfig.project)
 
-	progressDB, err := CreateKVProgressState(dbFile)
+	progressDB, err := CreateKVProgressState(cliConfig.category, dbFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -485,7 +486,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	category := "bugs"
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT)
@@ -496,5 +496,5 @@ func main() {
 		fmt.Println("Exiting")
 	}()
 
-	doMigration(category, progressDB)
+	doMigration(cliConfig.category, progressDB)
 }

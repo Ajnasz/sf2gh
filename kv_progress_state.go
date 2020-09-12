@@ -9,11 +9,12 @@ import (
 )
 
 type KVProgressState struct {
-	db *kv.DB
+	db     *kv.DB
+	prefix string
 }
 
 func (p KVProgressState) generateKey(entityType string, entityID string) []byte {
-	keyName := fmt.Sprintf("%s-%s", entityType, entityID)
+	keyName := fmt.Sprintf("%s-%s-%s", p.prefix, entityType, entityID)
 	return []byte(keyName)
 }
 
@@ -48,7 +49,7 @@ func (p KVProgressState) Close() error {
 	return nil
 }
 
-func CreateKVProgressState(fileName string) (*KVProgressState, error) {
+func CreateKVProgressState(prefix string, fileName string) (*KVProgressState, error) {
 	var db *kv.DB
 	var dberror error
 	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
@@ -63,5 +64,6 @@ func CreateKVProgressState(fileName string) (*KVProgressState, error) {
 
 	return &KVProgressState{
 		db,
+		prefix,
 	}, nil
 }
