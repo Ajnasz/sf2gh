@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -38,6 +39,18 @@ var (
 	ticketTemplateString  string
 	commentTemplateString string
 )
+
+var errExists = errors.New("Exists")
+var categories = []string{"bugs", "patches", "feature-requests", "support-requests"}
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
 
 func sleepTillRateLimitReset(rate github.Rate) {
 	if rate.Reset.After(time.Now()) {
@@ -86,6 +99,7 @@ func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (stri
 
 func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) (*github.IssueComment, error) {
 	body, err := createSFCommentBody(&post, ticket)
+	verbose("  Adding comment to issue")
 	debug(fmt.Sprintf("Add comment to issue %+v", body))
 	if err != nil {
 		return nil, err
@@ -107,11 +121,13 @@ func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *s
 func addCommentsToIssue(ctx context.Context, progressDB ProgressState, ticket *sfapi.Ticket, issue *github.Issue) error {
 	if len(ticket.DiscussionThread.Posts) > 0 {
 		for _, post := range ticket.DiscussionThread.Posts {
-			if stopped {
+			if stopped && !cliConfig.skipComments {
+				// do not exit in the middle of comments if skipComments is enabled
 				return nil
 			}
 
 			if _, found, _ := progressDB.Get("comment", post.Slug); found {
+				verbose("  Comment already exists, skipping")
 				continue
 			}
 
@@ -148,6 +164,7 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 		return nil, err
 	}
 	if found {
+		verbose("  Issue already exists, skipping")
 		debug(fmt.Sprintf("Issue already created %+v", ticket))
 		issue, _, err := githubClient.Issues.Get(ctx, config.Github.UserName, cliConfig.ghRepo, int(issueNumber))
 
@@ -155,7 +172,7 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 			return nil, err
 		}
 
-		return issue, nil
+		return issue, errExists
 	}
 
 	labels := getPatchLabels(append(ticket.Labels, category, "sourceforge"), ticket.Status)
@@ -345,10 +362,13 @@ func createTicket(ctx context.Context, progressDB ProgressState, category string
 		return err
 	}
 
+	verbose(fmt.Sprintf("Creating Ticket: %s", ticket.Summary))
 	debug(fmt.Sprintf("SF Ticket %+v", ticket))
 
 	issue, err := sfTicketToGhIssue(ctx, progressDB, ticket, category)
-	if err != nil {
+	if err == errExists && !cliConfig.skipComments {
+		// Ignore the error, go ahead with comment checks
+	} else if err != nil {
 		return err
 	}
 
@@ -453,9 +473,11 @@ func init() {
 	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
 	flag.StringVar(&cliConfig.ticketTemplate, "ticketTemplate", "", "Template file for a ticket")
 	flag.StringVar(&cliConfig.commentTemplate, "commentTemplate", "", "Template file for a comments")
-	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category")
-	flag.StringVar(&cliConfig.dbFile, "progressStorage", "progressDB", "File where the progress store - needed to make sure a ticket or comment is created only once")
+	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category. One of: "+strings.Join(categories[:], ", "))
+	flag.StringVar(&cliConfig.dbFile, "progressStorage", "", "File where the progress is stored, to ensure a ticket or comment is created only once")
+	flag.BoolVar(&cliConfig.skipComments, "skipComments", false, "Do not check for new comments on already existing tickets")
 	flag.BoolVar(&cliConfig.version, "version", false, "Show version and build information")
+	flag.BoolVar(&cliConfig.verbose, "verbose", false, "Display more verbose progress")
 	flag.BoolVar(&cliConfig.debug, "debug", false, "Display debug information")
 }
 
@@ -472,9 +494,17 @@ func getTemplateString(defaultTemplate string, templateFileName string) (string,
 
 func main() {
 	flag.Parse()
+	if cliConfig.dbFile == "" {
+		cliConfig.dbFile = fmt.Sprintf("progress_%s.dat", cliConfig.ghRepo)
+	}
 
 	if cliConfig.version {
 		fmt.Println(version, build)
+		return
+	}
+
+	if !stringInSlice(cliConfig.category, categories) {
+		fmt.Println("Category must be one of: " + strings.Join(categories[:], ", "))
 		return
 	}
 
@@ -516,7 +546,10 @@ func main() {
 	go func() {
 		<-signalChan
 		stopped = true
-		fmt.Println("Exiting")
+		fmt.Println("\n*** Exiting due to user break")
+		if cliConfig.skipComments {
+			fmt.Println("*** Current ticket will be completed")
+		}
 	}()
 
 	doMigration(cliConfig.category, progressDB)

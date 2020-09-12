@@ -1,5 +1,5 @@
-Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
-Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04:05"}}
+Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04:05" }}
 Original: https://sourceforge.net/p/{{ .Project }}/{{ .Category }}/{{ .SFTicket.TicketNum }}/{{ .SFComment.Slug }}
 
 ---

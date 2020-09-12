@@ -7,3 +7,9 @@ func debug(args ...interface{}) {
 		fmt.Println(args...)
 	}
 }
+
+func verbose(args ...interface{}) {
+	if cliConfig.verbose {
+		fmt.Println(args...)
+	}
+}

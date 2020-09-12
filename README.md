@@ -37,5 +37,11 @@ For example to move fluxbox tickets to your fluxbox github repo:
 
  - ghRepo: Github repository name (required)
  - project: Sourceforge project name (required)
+ - category: Process what type of ticket (one of: bugs, patches, feature-requests, support-requests) (default "bugs")
+ - progressStorage: Name of a file to store progress in (default progress-<ghRepo>.dat) (optional)
+ - skipcomments: Do not check for new comments on already existing tickets (optional)
+ - ticketTemplate: Name of file to use as template for tickets
+ - commentTemplate: Name of file to use as template for comments
  - sleepTime: Sleep between api calls in milliseconds. Github may stop you use the API if you call it too frequently (optional)
+ - verbose: Display more verbose progress (optional)
  - debug: Enable debug messages (optional)
