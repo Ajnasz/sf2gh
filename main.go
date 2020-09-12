@@ -84,6 +84,7 @@ func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (stri
 
 func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) (*github.IssueComment, error) {
 	body, err := createSFCommentBody(&post, ticket)
+	debug(fmt.Sprintf("Add comment to issue %+v", body))
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +146,7 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 		return nil, err
 	}
 	if found {
+		debug(fmt.Sprintf("Issue already created %+v", ticket))
 		issue, _, err := githubClient.Issues.Get(ctx, config.Github.UserName, cliConfig.ghRepo, int(issueNumber))
 
 		if err != nil {
@@ -185,6 +187,8 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 		}
 	}
 
+	debug(fmt.Sprintf("Issue created: %+v", issue))
+
 	statusText := getStatusText(ticket)
 
 	if statusText != *issue.State {
@@ -221,6 +225,7 @@ func isAlreadyExistError(respError *github.ErrorResponse) bool {
 func createMileStone(ctx context.Context, progressDB ProgressState, ms sfapi.Milestone) error {
 	progressDB.Get("milestone", ms.Name)
 	if _, found, _ := progressDB.Get("milestone", ms.Name); found {
+		debug("Skip creating milestone", ms.Name)
 		return nil
 	}
 
@@ -241,6 +246,8 @@ func createMileStone(ctx context.Context, progressDB ProgressState, ms sfapi.Mil
 			return err
 		}
 	}
+
+	debug("Milestone created", milestone)
 
 	if *milestone.State != status {
 		milestone, response, err = githubClient.Issues.EditMilestone(ctx, config.Github.UserName, cliConfig.ghRepo, *milestone.Number, &github.Milestone{
@@ -336,10 +343,15 @@ func createTicket(ctx context.Context, progressDB ProgressState, category string
 		return err
 	}
 
+	debug(fmt.Sprintf("SF Ticket %+v", ticket))
+
 	issue, err := sfTicketToGhIssue(ctx, progressDB, ticket, category)
 	if err != nil {
 		return err
 	}
+
+	debug(fmt.Sprintf("Ticket created %+v", issue))
+
 	err = addCommentsToIssue(ctx, progressDB, ticket, issue)
 	if err != nil {
 		return err
@@ -368,6 +380,7 @@ func createTickets(ctx context.Context, progressDB ProgressState, tickets []sfap
 }
 
 func getPagesCount(category string, expectedLimit int) (int, error) {
+	debug("Get pages count")
 	query := sfapi.NewRequestQuery()
 	query.Limit = 1
 	ticket, _, err := sfClient.Tracker.Info(category, *query)
@@ -380,19 +393,24 @@ func getPagesCount(category string, expectedLimit int) (int, error) {
 }
 
 func doMigration(category string, progressDB ProgressState) {
+	debug("Start migration")
 	ctx := context.Background()
 	query := sfapi.NewRequestQuery()
 	query.Limit = 10
 	page, err := getPagesCount(category, query.Limit)
+	debug("Pages", page)
+
 	if err != nil {
 		log.Println(err)
 		return
 	}
+
 	for page >= 0 {
 		if stopped {
 			return
 		}
 		query.Page = page
+		debug(fmt.Sprintf("Query tracker info. Category: %s, %+v", category, query))
 		tickets, _, err := sfClient.Tracker.Info(category, *query)
 
 		if err != nil {
@@ -424,6 +442,7 @@ func doMigration(category string, progressDB ProgressState) {
 
 		page--
 	}
+	debug("Finish migration")
 }
 
 func init() {
@@ -435,6 +454,7 @@ func init() {
 	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category")
 	flag.StringVar(&cliConfig.dbFile, "progressStorage", "progressDB", "File where the progress store - needed to make sure a ticket or comment is created only once")
 	flag.BoolVar(&cliConfig.version, "version", false, "Show version and build information")
+	flag.BoolVar(&cliConfig.debug, "debug", false, "Display debug information")
 }
 
 func getTemplateString(defaultTemplate string, templateFileName string) (string, error) {
