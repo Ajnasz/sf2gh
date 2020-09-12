@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -365,13 +367,11 @@ func createTicket(ctx context.Context, progressDB ProgressState, category string
 
 }
 
-func createTickets(ctx context.Context, progressDB ProgressState, tickets *sfapi.TrackerInfo, category string) (bool, error) {
-	if len(tickets.Tickets) == 0 {
-		return false, nil
-	}
-	progress := pb.StartNew(len(tickets.Tickets))
-	log.Println(fmt.Sprintf("Creating tickets %d of %d", len(tickets.Tickets)+tickets.Page*tickets.Limit, tickets.Count))
-	for _, ticket := range tickets.Tickets {
+func createTickets(ctx context.Context, progressDB ProgressState, tickets []sfapi.TrackerInfoTicket, category string) (bool, error) {
+	progress := pb.StartNew(len(tickets))
+	ts := &trackerInfoTicketSorter{tickets}
+	sort.Sort(ts)
+	for _, ticket := range tickets {
 		if stopped {
 			return false, nil
 		}
@@ -385,20 +385,33 @@ func createTickets(ctx context.Context, progressDB ProgressState, tickets *sfapi
 	return true, nil
 }
 
+func getPagesCount(category string, expectedLimit int) (int, error) {
+	query := sfapi.NewRequestQuery()
+	query.Limit = 1
+	ticket, _, err := sfClient.Tracker.Info(category, *query)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return int(math.Ceil(float64(ticket.Count / expectedLimit))), nil
+}
+
 func doMigration(category string, progressDB ProgressState) {
 	ctx := context.Background()
-	var page int
-	var limit int
 	query := sfapi.NewRequestQuery()
-	query.Limit = 100
-	for {
+	query.Limit = 10
+	page, err := getPagesCount(category, query.Limit)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for page >= 0 {
 		if stopped {
 			return
 		}
 		query.Page = page
 		tickets, _, err := sfClient.Tracker.Info(category, *query)
-		page = tickets.Page
-		limit = tickets.Limit
 
 		if err != nil {
 			log.Println(err)
@@ -418,17 +431,16 @@ func doMigration(category string, progressDB ProgressState) {
 			}
 		}
 
-		if ok, err := createTickets(ctx, progressDB, tickets, category); !ok {
-			if err != nil {
-				log.Println(err)
+		if len(tickets.Tickets) != 0 {
+			log.Println(fmt.Sprintf("Creating tickets %d-%d of %d", tickets.Page*tickets.Limit, len(tickets.Tickets)+tickets.Page*tickets.Limit, tickets.Count))
+			if ok, err := createTickets(ctx, progressDB, tickets.Tickets, category); !ok {
+				if err != nil {
+					log.Println(err)
+				}
 			}
 		}
 
-		if page*limit+limit >= tickets.Count {
-			break
-		}
-
-		page++
+		page--
 	}
 }
 
