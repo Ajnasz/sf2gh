@@ -100,8 +100,8 @@ func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) *stri
 	return &body
 }
 
-func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) error {
-	_, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
+func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) (*github.IssueComment, error) {
+	issueComment, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
 		Body: createSFCommentBody(&post, ticket),
 	})
 
@@ -109,10 +109,10 @@ func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *s
 		if _, ok := err.(*github.RateLimitError); ok {
 			sleepTillRateLimitReset(response.Rate)
 		} else {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return issueComment, nil
 }
 
 func addCommentsToIssue(ctx context.Context, progressDB ProgressState, ticket *sfapi.Ticket, issue *github.Issue) error {
@@ -126,11 +126,12 @@ func addCommentsToIssue(ctx context.Context, progressDB ProgressState, ticket *s
 				continue
 			}
 
-			err := addCommentToIssue(ctx, post, ticket, issue)
+			issueComment, err := addCommentToIssue(ctx, post, ticket, issue)
 
 			if err != nil {
 				return err
 			}
+			progressDB.Set("comment", post.Slug, uint64(*issueComment.ID))
 			time.Sleep(time.Millisecond * cliConfig.sleepTime)
 		}
 	}
