@@ -17,7 +17,7 @@ type TicketFormatterData struct {
 }
 
 const ticketTemplate = `Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
-Created by **{{.SFTicket.ReportedBy}}** on {{.SFTicket.CreatedTime | formatDate "2006-01-02 15:04"}}
+Created by **[{{.SFTicket.ReportedBy}}](https://sourceforge.net/u/{{.SFTicket.ReportedBy}}/)** on {{.SFTicket.CreatedTime | formatDate "2006-01-02 15:04"}}
 Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.TicketNum}}
 
 ---
@@ -31,12 +31,15 @@ Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.Ticke
 `
 
 type CommentFormatterData struct {
+	Imported  time.Time
 	SFComment *sfapi.DiscussionPost
 	SFTicket  *sfapi.Ticket
 }
 
 const commentTemplate = `
-Created by **{{ .SFComment.Author }}** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
+Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+Original: https://sourceforge.net/p/{{ .Project }}/{{ .Category }}/{{ .SFTicket.TicketNum }}/{{ .SFComment.Slug }}
 
 ---
 {{ if (ne (printf "#%d %s" .SFTicket.TicketNum .SFTicket.Summary) .SFComment.Subject)}}

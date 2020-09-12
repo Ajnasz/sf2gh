@@ -73,6 +73,7 @@ func createSFBody(ticket *sfapi.Ticket, category string) (string, error) {
 
 func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (string, error) {
 	return FormatComment(commentTemplateString, CommentFormatterData{
+		Imported:  time.Now(),
 		SFComment: post,
 		SFTicket:  ticket,
 	})
