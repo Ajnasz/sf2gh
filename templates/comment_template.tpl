@@ -1,4 +1,6 @@
-Created by **{{ .SFComment.Author }}** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
+Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+Original: https://sourceforge.net/p/{{ .Project }}/{{ .Category }}/{{ .SFTicket.TicketNum }}/{{ .SFComment.Slug }}
 
 ---
 {{ if (ne (printf "#%d %s" .SFTicket.TicketNum .SFTicket.Summary) .SFComment.Subject)}}
@@ -11,6 +13,6 @@ Created by **{{ .SFComment.Author }}** on {{ .SFComment.TimestampTime | formatDa
 
 
 {{ if (gt (len .SFComment.Attachments) 0) }}Attachments:
-{{ range .SFComment.Attachments}}- {{.URL}}
+{{ range .SFComment.Attachments }}- {{ .URL }}
 {{ end }}
 {{ end }}
