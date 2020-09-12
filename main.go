@@ -22,8 +22,6 @@ import (
 	"modernc.org/kv"
 )
 
-const dbFile = "progressDB"
-
 // wait after each github api call
 var _sleepTime int
 
@@ -451,6 +449,7 @@ func init() {
 	flag.StringVar(&cliConfig.ticketTemplate, "ticketTemplate", "", "Template file for a ticket")
 	flag.StringVar(&cliConfig.commentTemplate, "commentTemplate", "", "Template file for a comments")
 	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category")
+	flag.StringVar(&cliConfig.dbFile, "progressStorage", "progressDB", "File where the progress store - needed to make sure a ticket or comment is created only once")
 }
 
 func getTemplateString(defaultTemplate string, templateFileName string) (string, error) {
@@ -484,7 +483,7 @@ func main() {
 
 	sfClient = sfapi.NewClient(nil, cliConfig.project)
 
-	progressDB, err := CreateKVProgressState(cliConfig.category, dbFile)
+	progressDB, err := CreateKVProgressState(cliConfig.category, cliConfig.dbFile)
 	if err != nil {
 		log.Fatal(err)
 	}

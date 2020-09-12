@@ -52,7 +52,7 @@ func (p KVProgressState) Close() error {
 func CreateKVProgressState(prefix string, fileName string) (*KVProgressState, error) {
 	var db *kv.DB
 	var dberror error
-	if _, err := os.Stat(dbFile); os.IsNotExist(err) {
+	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 		db, dberror = kv.Create(fileName, &kv.Options{})
 	} else {
 		db, dberror = kv.Open(fileName, &kv.Options{})
