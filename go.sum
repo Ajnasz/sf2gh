@@ -35,6 +35,8 @@ github.com/Ajnasz/config-validator v0.0.0-20170916205431-5230e68115be h1:bK/5Iuc
 github.com/Ajnasz/config-validator v0.0.0-20170916205431-5230e68115be/go.mod h1:tp/JwHSmBKubKhH18G2c+2L/0s1do745+k7iHhFVkq4=
 github.com/Ajnasz/sfapi v1.2.0 h1:GhI0bIsA5qcSiBfK9LQFTLi4QzFA/SY9i4XwIgkOOfk=
 github.com/Ajnasz/sfapi v1.2.0/go.mod h1:JT8zf5pCws0o3U5WT3b9KJYWhUx+6h8DYDcdf4zxSQ4=
+github.com/Ajnasz/sfapi v1.3.0 h1:2uohwrdLzbLgHQghS3LsDULcdWr2Ig8XkOnIEyYka2Y=
+github.com/Ajnasz/sfapi v1.3.0/go.mod h1:JT8zf5pCws0o3U5WT3b9KJYWhUx+6h8DYDcdf4zxSQ4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/VividCortex/ewma v1.1.1 h1:MnEK4VOv6n0RSY4vtRe3h11qjxL3+t0B8yOL8iMXdcM=

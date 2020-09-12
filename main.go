@@ -31,7 +31,10 @@ var ghMilestones []*github.Milestone
 var config Config
 var githubClient *github.Client
 var sfClient *sfapi.Client
+
 var stopped bool
+var ticketTemplateString string
+var commentTemplateString string
 
 func sleepTillRateLimitReset(rate github.Rate) {
 	if rate.Reset.After(time.Now()) {
@@ -60,17 +63,7 @@ func getStatusText(ticket *sfapi.Ticket) string {
 }
 
 func createSFBody(ticket *sfapi.Ticket, category string) (string, error) {
-	var templateString string
-	if cliConfig.ticketTemplate != "" {
-		data, err := ioutil.ReadFile(cliConfig.ticketTemplate)
-		if err != nil {
-			return "", err
-		}
-		templateString = string(data)
-	} else {
-		templateString = formatTemplate
-	}
-	return formatTicket(templateString, TicketFormatterData{
+	return FormatTicket(ticketTemplateString, TicketFormatterData{
 		SFTicket: ticket,
 		Project:  cliConfig.project,
 		Category: category,
@@ -78,32 +71,40 @@ func createSFBody(ticket *sfapi.Ticket, category string) (string, error) {
 	})
 }
 
-func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) *string {
-	createdText := fmt.Sprintf("Created by **%s** on %s", post.Author, post.Timestamp)
-	var body string
+func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (string, error) {
+	return FormatComment(commentTemplateString, CommentFormatterData{
+		SFComment: post,
+		SFTicket:  ticket,
+	})
+	// createdText := fmt.Sprintf("Created by **%s** on %s", post.Author, post.Timestamp)
+	// var body string
 
-	if post.Subject != fmt.Sprintf("#%d %s", ticket.TicketNum, ticket.Summary) {
-		body = fmt.Sprintf("*%s*\n\n%s\n\n%s", post.Subject, createdText, post.Text)
-	} else {
-		body = fmt.Sprintf("%s\n\n%s", createdText, post.Text)
-	}
+	// if post.Subject != fmt.Sprintf("#%d %s", ticket.TicketNum, ticket.Summary) {
+	// 	body = fmt.Sprintf("*%s*\n\n%s\n\n%s", post.Subject, createdText, post.Text)
+	// } else {
+	// 	body = fmt.Sprintf("%s\n\n%s", createdText, post.Text)
+	// }
 
-	if len(post.Attachments) > 0 {
-		attachments := []string{}
+	// if len(post.Attachments) > 0 {
+	// 	attachments := []string{}
 
-		for _, attachment := range post.Attachments {
-			attachments = append(attachments, attachment.URL)
-		}
+	// 	for _, attachment := range post.Attachments {
+	// 		attachments = append(attachments, attachment.URL)
+	// 	}
 
-		body += fmt.Sprintf("\n\nAttachments: %s", strings.Join(attachments, "\n"))
-	}
+	// 	body += fmt.Sprintf("\n\nAttachments: %s", strings.Join(attachments, "\n"))
+	// }
 
-	return &body
+	// return &body
 }
 
 func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) (*github.IssueComment, error) {
+	body, err := createSFCommentBody(&post, ticket)
+	if err != nil {
+		return nil, err
+	}
 	issueComment, response, err := githubClient.Issues.CreateComment(ctx, config.Github.UserName, cliConfig.ghRepo, *issue.Number, &github.IssueComment{
-		Body: createSFCommentBody(&post, ticket),
+		Body: &body,
 	})
 
 	if err != nil {
@@ -436,6 +437,18 @@ func init() {
 	flag.StringVar(&cliConfig.ghRepo, "ghRepo", "", "Github repository name")
 	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
 	flag.StringVar(&cliConfig.ticketTemplate, "ticketTemplate", "", "Template file for a ticket")
+	flag.StringVar(&cliConfig.commentTemplate, "commentTemplate", "", "Template file for a comments")
+}
+
+func getTemplateString(defaultTemplate string, templateFileName string) (string, error) {
+	if templateFileName != "" {
+		data, err := ioutil.ReadFile(templateFileName)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	return defaultTemplate, nil
 }
 
 func main() {
@@ -464,6 +477,14 @@ func main() {
 	}
 
 	defer progressDB.Close()
+	ticketTemplateString, err = getTemplateString(ticketTemplate, cliConfig.ticketTemplate)
+	if err != nil {
+		log.Fatal(err)
+	}
+	commentTemplateString, err = getTemplateString(commentTemplate, cliConfig.commentTemplate)
+	if err != nil {
+		log.Fatal(err)
+	}
 	category := "bugs"
 
 	signalChan := make(chan os.Signal, 1)
@@ -474,5 +495,6 @@ func main() {
 		stopped = true
 		fmt.Println("Exiting")
 	}()
+
 	doMigration(category, progressDB)
 }

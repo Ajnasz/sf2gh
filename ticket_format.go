@@ -16,9 +16,11 @@ type TicketFormatterData struct {
 	Imported time.Time
 }
 
-const formatTemplate = `Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
-Created by **{{.SFTicket.ReportedBy}}** on {{.SFTicket.CreatedDate}}
+const ticketTemplate = `Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
+Created by **{{.SFTicket.ReportedBy}}** on {{.SFTicket.CreatedTime | formatDate "2006-01-02 15:04"}}
 Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.TicketNum}}
+
+---
 
 {{.SFTicket.Description}}
 
@@ -28,20 +30,51 @@ Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.Ticke
 {{ end }}
 `
 
+type CommentFormatterData struct {
+	SFComment *sfapi.DiscussionPost
+	SFTicket  *sfapi.Ticket
+}
+
+const commentTemplate = `
+Created by **{{ .SFComment.Author }}** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
+
+---
+{{ if (ne (printf "#%d %s" .SFTicket.TicketNum .SFTicket.Summary) .SFComment.Subject)}}
+*{{ .SFComment.Subject }}*
+
+{{ .SFComment.Text }}
+{{ else }}
+{{ .SFComment.Text }}
+{{ end }}
+
+
+{{ if (gt (len .SFTicket.Attachments) 0) }}Attachments:
+{{ range .SFTicket.Attachments}}- {{.URL}}
+{{ end }}
+{{ end }}
+`
+
 // FormatTicket Generates Github ticket body
-func formatTicket(templateString string, ticket TicketFormatterData) (string, error) {
+func formatTpl(name string, templateString string, data interface{}) (string, error) {
 	funcMap := template.FuncMap{
 		"formatDate": func(format string, t time.Time) string {
 			return t.Format(format)
 		},
 	}
-	tpl, err := template.New("ticket").Funcs(funcMap).Parse(templateString)
+	tpl, err := template.New(name).Funcs(funcMap).Parse(templateString)
 	if err != nil {
 		return "", err
 	}
 
 	var buf bytes.Buffer
-	tpl.Execute(&buf, ticket)
+	tpl.Execute(&buf, data)
 
 	return buf.String(), nil
+}
+
+func FormatTicket(templateString string, data TicketFormatterData) (string, error) {
+	return formatTpl("ticket", templateString, data)
+}
+func FormatComment(templateString string, data CommentFormatterData) (string, error) {
+	return formatTpl("comment", templateString, data)
 }
