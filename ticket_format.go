@@ -48,8 +48,8 @@ Created by **{{ .SFComment.Author }}** on {{ .SFComment.TimestampTime | formatDa
 {{ end }}
 
 
-{{ if (gt (len .SFTicket.Attachments) 0) }}Attachments:
-{{ range .SFTicket.Attachments}}- {{.URL}}
+{{ if (gt (len .SFComment.Attachments) 0) }}Attachments:
+{{ range .SFComment.Attachments }}- {{ .URL }}
 {{ end }}
 {{ end }}
 `
