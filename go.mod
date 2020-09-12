@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/Ajnasz/config-validator v0.0.0-20170916205431-5230e68115be
-	github.com/Ajnasz/sfapi v1.1.0
+	github.com/Ajnasz/sfapi v1.2.0
 	github.com/cheggaaa/pb/v3 v3.0.5
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
 	github.com/golang/snappy v0.0.1 // indirect

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -58,23 +59,23 @@ func getStatusText(ticket *sfapi.Ticket) string {
 	return "open"
 }
 
-func createSFBody(ticket *sfapi.Ticket, category string) *string {
-	importText := fmt.Sprintf("Imported from SourceForge on %s", time.Now().Format(time.UnixDate))
-	createdText := fmt.Sprintf("Created by **%s** on %s", ticket.ReportedBy, ticket.CreatedDate)
-	link := fmt.Sprintf("Original: http://sourceforge.net/p/%s/%s/%d", cliConfig.project, category, ticket.TicketNum)
-	body := fmt.Sprintf("%s\n%s\n%s\n\n%s", importText, createdText, link, ticket.Description)
-
-	if len(ticket.Attachments) > 0 {
-		attachments := []string{}
-
-		for _, attachment := range ticket.Attachments {
-			attachments = append(attachments, attachment.URL)
+func createSFBody(ticket *sfapi.Ticket, category string) (string, error) {
+	var templateString string
+	if cliConfig.ticketTemplate != "" {
+		data, err := ioutil.ReadFile(cliConfig.ticketTemplate)
+		if err != nil {
+			return "", err
 		}
-
-		body += fmt.Sprintf("\n\nAttachments: %s", strings.Join(attachments, "\n"))
+		templateString = string(data)
+	} else {
+		templateString = formatTemplate
 	}
-
-	return &body
+	return formatTicket(templateString, TicketFormatterData{
+		SFTicket: ticket,
+		Project:  cliConfig.project,
+		Category: category,
+		Imported: time.Now(),
+	})
 }
 
 func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) *string {
@@ -121,8 +122,8 @@ func addCommentsToIssue(ctx context.Context, progressDB ProgressState, ticket *s
 			if stopped {
 				return nil
 			}
+
 			if _, found, _ := progressDB.Get("comment", post.Slug); found {
-				// fmt.Println("Skip creating comment")
 				continue
 			}
 
@@ -159,7 +160,6 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 		return nil, err
 	}
 	if found {
-		// fmt.Println("Issue exists, querying")
 		issue, _, err := githubClient.Issues.Get(ctx, config.Github.UserName, cliConfig.ghRepo, int(issueNumber))
 
 		if err != nil {
@@ -172,9 +172,15 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 	labels := getPatchLabels(append(ticket.Labels, category, "sourceforge"), ticket.Status)
 	mileStone := findMatchingMilestone(ticket)
 
+	body, err := createSFBody(ticket, category)
+
+	if err != nil {
+		return nil, err
+	}
+
 	issueRequest := github.IssueRequest{
 		Title:  &ticket.Summary,
-		Body:   createSFBody(ticket, category),
+		Body:   &body,
 		Labels: &labels,
 		// Assignee: &ticket.AssignedTo,
 		// State: &statusText,
@@ -316,21 +322,6 @@ func getFullSfTicket(category string, info sfapi.TrackerInfoTicket) (*sfapi.Tick
 // ProgressItem is Struct to define progress
 type ProgressItem struct{}
 
-func init() {
-	flag.IntVar(&_sleepTime, "sleepTime", 1550, "Sleep between api calls, github may stop you use the API if you call it too frequently")
-	flag.StringVar(&cliConfig.ghRepo, "ghRepo", "", "Github repository name")
-	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
-	flag.Parse()
-
-	cliConfig.sleepTime = time.Duration(_sleepTime)
-
-	err := configValidator.Validate(cliConfig)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func getDB(dbFile string, opts *kv.Options) (*kv.DB, error) {
 	createOpen := kv.Open
 	status := "opening"
@@ -440,7 +431,23 @@ func doMigration(category string, progressDB ProgressState) {
 	}
 }
 
+func init() {
+	flag.IntVar(&_sleepTime, "sleepTime", 1550, "Sleep between api calls, github may stop you use the API if you call it too frequently")
+	flag.StringVar(&cliConfig.ghRepo, "ghRepo", "", "Github repository name")
+	flag.StringVar(&cliConfig.project, "project", "", "Sourceforge project")
+	flag.StringVar(&cliConfig.ticketTemplate, "ticketTemplate", "", "Template file for a ticket")
+}
+
 func main() {
+	flag.Parse()
+
+	cliConfig.sleepTime = time.Duration(_sleepTime)
+
+	err := configValidator.Validate(cliConfig)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 	config = GetConfig()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: config.Github.AccessToken},
