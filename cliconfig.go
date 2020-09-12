@@ -12,4 +12,5 @@ type CliConfig struct {
 	debug           bool
 	ticketTemplate  string
 	commentTemplate string
+	version         bool
 }

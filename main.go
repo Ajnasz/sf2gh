@@ -22,19 +22,22 @@ import (
 	"modernc.org/kv"
 )
 
-// wait after each github api call
-var _sleepTime int
+var (
+	_sleepTime int
 
-var cliConfig CliConfig
+	cliConfig CliConfig
+	version   string
+	build     string
 
-var ghMilestones []*github.Milestone
-var config Config
-var githubClient *github.Client
-var sfClient *sfapi.Client
+	ghMilestones []*github.Milestone
+	config       Config
+	githubClient *github.Client
+	sfClient     *sfapi.Client
 
-var stopped bool
-var ticketTemplateString string
-var commentTemplateString string
+	stopped               bool
+	ticketTemplateString  string
+	commentTemplateString string
+)
 
 func sleepTillRateLimitReset(rate github.Rate) {
 	if rate.Reset.After(time.Now()) {
@@ -77,26 +80,6 @@ func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (stri
 		SFComment: post,
 		SFTicket:  ticket,
 	})
-	// createdText := fmt.Sprintf("Created by **%s** on %s", post.Author, post.Timestamp)
-	// var body string
-
-	// if post.Subject != fmt.Sprintf("#%d %s", ticket.TicketNum, ticket.Summary) {
-	// 	body = fmt.Sprintf("*%s*\n\n%s\n\n%s", post.Subject, createdText, post.Text)
-	// } else {
-	// 	body = fmt.Sprintf("%s\n\n%s", createdText, post.Text)
-	// }
-
-	// if len(post.Attachments) > 0 {
-	// 	attachments := []string{}
-
-	// 	for _, attachment := range post.Attachments {
-	// 		attachments = append(attachments, attachment.URL)
-	// 	}
-
-	// 	body += fmt.Sprintf("\n\nAttachments: %s", strings.Join(attachments, "\n"))
-	// }
-
-	// return &body
 }
 
 func addCommentToIssue(ctx context.Context, post sfapi.DiscussionPost, ticket *sfapi.Ticket, issue *github.Issue) (*github.IssueComment, error) {
@@ -451,6 +434,7 @@ func init() {
 	flag.StringVar(&cliConfig.commentTemplate, "commentTemplate", "", "Template file for a comments")
 	flag.StringVar(&cliConfig.category, "category", "bugs", "Sourceforge category")
 	flag.StringVar(&cliConfig.dbFile, "progressStorage", "progressDB", "File where the progress store - needed to make sure a ticket or comment is created only once")
+	flag.BoolVar(&cliConfig.version, "version", false, "Show version and build information")
 }
 
 func getTemplateString(defaultTemplate string, templateFileName string) (string, error) {
@@ -466,6 +450,11 @@ func getTemplateString(defaultTemplate string, templateFileName string) (string,
 
 func main() {
 	flag.Parse()
+
+	if cliConfig.version {
+		fmt.Println(version, build)
+		return
+	}
 
 	cliConfig.sleepTime = time.Duration(_sleepTime)
 
