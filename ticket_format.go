@@ -16,8 +16,8 @@ type TicketFormatterData struct {
 	Imported time.Time
 }
 
-const ticketTemplate = `Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
-Created by **[{{.SFTicket.ReportedBy}}](https://sourceforge.net/u/{{.SFTicket.ReportedBy}}/)** on {{.SFTicket.CreatedTime | formatDate "2006-01-02 15:04"}}
+const ticketTemplate = `Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04:05"}}
+Created by **[{{.SFTicket.ReportedBy}}](https://sourceforge.net/u/{{.SFTicket.ReportedBy}}/)** on {{.SFTicket.CreatedTime | formatDate "2006-01-02 15:04:05"}}
 Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.TicketNum}}
 
 ---
@@ -39,9 +39,9 @@ type CommentFormatterData struct {
 }
 
 const commentTemplate = `
-Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04"}}
-Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04" }}
-Original: https://sourceforge.net/p/{{ .Project }}/{{ .Category }}/{{ .SFTicket.TicketNum }}/{{ .SFComment.Slug }}
+Imported from SourceForge on {{.Imported | formatDate "2006-01-02 15:04:05"}}
+Created by **[{{ .SFComment.Author }}](https://sourceforge.net/u/{{.SFComment.Author}}/)** on {{ .SFComment.TimestampTime | formatDate "2006-01-02 15:04:05" }}
+Original: https://sourceforge.net/p/{{ .Project }}/{{ .Category }}/{{ .SFTicket.TicketNum }}/#{{ .SFComment.Slug }}
 
 ---
 {{ if (ne (printf "#%d %s" .SFTicket.TicketNum .SFTicket.Summary) .SFComment.Subject)}}

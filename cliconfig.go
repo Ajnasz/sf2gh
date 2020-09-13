@@ -9,7 +9,9 @@ type CliConfig struct {
 	dbFile          string
 	category        string
 	sleepTime       time.Duration
+	verbose         bool
 	debug           bool
+	skipComments    bool
 	ticketTemplate  string
 	commentTemplate string
 	version         bool
