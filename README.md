@@ -1,7 +1,16 @@
-# Sourceforge 2 Github
+# Sourceforge 2 Github (sf2gh)
 
-Move sourceforge tickets to github
+Migrates sourceforge tickets (bugs, patches, feature requests, support requests) to Github issues using the Sourcforge API to
+fetch info and the Github API to create the issues and comments.  Admin privs for the destination project are needed,
+but no special privileges are needed on the Sourceforge side (unlike other migration tools which require you to
+be an admin of the original Sourceforge project).
 
+All tickets and comments are created under the Github user credentials supplied, and links back to the original Sourceforge
+tickets/comments/users/files are provided in each ticket and comment.
+
+Progress is stored in a local database file, so the migration can be aborted and restarted, or even re-run periodically
+if needed to migrate any additional activity on the Sourceforge project over to the Github project, while avoiding
+the creation of duplicate issues or comments (if the proper progress datafile is supplied).
 
 ## Build
 
