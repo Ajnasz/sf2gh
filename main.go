@@ -65,17 +65,19 @@ func getStatusText(ticket *sfapi.Ticket) string {
 	return "open"
 }
 
-func createSFBody(ticket *sfapi.Ticket, category string) (string, error) {
+func createSFBody(ticket *sfapi.Ticket) (string, error) {
 	return FormatTicket(ticketTemplateString, TicketFormatterData{
 		SFTicket: ticket,
 		Project:  cliConfig.project,
-		Category: category,
+		Category: cliConfig.category,
 		Imported: time.Now(),
 	})
 }
 
 func createSFCommentBody(post *sfapi.DiscussionPost, ticket *sfapi.Ticket) (string, error) {
 	return FormatComment(commentTemplateString, CommentFormatterData{
+		Project:   cliConfig.project,
+		Category:  cliConfig.category,
 		Imported:  time.Now(),
 		SFComment: post,
 		SFTicket:  ticket,
@@ -159,7 +161,7 @@ func sfTicketToGhIssue(ctx context.Context, progressDB ProgressState, ticket *sf
 	labels := getPatchLabels(append(ticket.Labels, category, "sourceforge"), ticket.Status)
 	mileStone := findMatchingMilestone(ticket)
 
-	body, err := createSFBody(ticket, category)
+	body, err := createSFBody(ticket)
 
 	if err != nil {
 		return nil, err

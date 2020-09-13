@@ -32,7 +32,7 @@ func ExampleFormatTicket_attachments() {
 	fmt.Println(out)
 	// Output:
 	// Imported from SourceForge on 2020-09-11 18:38
-	// Created by **reporter** on 2001-08-14 16:50
+	// Created by **[reporter](https://sourceforge.net/u/reporter/)** on 2001-08-14 16:50
 	// Original: https://sourceforge.net/p/project/cateory/123
 	//
 	// ---
@@ -65,7 +65,7 @@ func ExampleFormatTicket_noattachments() {
 	fmt.Println(out)
 	// Output:
 	// Imported from SourceForge on 2020-09-11 18:38
-	// Created by **reporter** on 2001-08-14 16:50
+	// Created by **[reporter](https://sourceforge.net/u/reporter/)** on 2001-08-14 16:50
 	// Original: https://sourceforge.net/p/project/cateory/123
 	//
 	// ---
@@ -74,7 +74,11 @@ func ExampleFormatTicket_noattachments() {
 }
 
 func ExampleFormatComment_summary() {
+	t, _ := time.Parse(time.RFC3339Nano, "2020-09-11T18:38:20.999999999+02:00")
 	vars := CommentFormatterData{
+		Imported: t,
+		Project:  "project",
+		Category: "category",
 		SFTicket: &sfapi.Ticket{
 			CreatedDate: "2001-08-14 16:50:45",
 			TicketNum:   123,
@@ -88,6 +92,7 @@ func ExampleFormatComment_summary() {
 			Timestamp: "2002-08-14 16:50:45",
 			Subject:   "Summary",
 			Text:      "Comment text",
+			Slug:      "1a2b3",
 		},
 	}
 
@@ -95,7 +100,9 @@ func ExampleFormatComment_summary() {
 
 	fmt.Println(out)
 	// Output:
-	// Created by **author** on 2002-08-14 16:50
+	// Imported from SourceForge on 2020-09-11 18:38
+	// Created by **[author](https://sourceforge.net/u/author/)** on 2002-08-14 16:50
+	// Original: https://sourceforge.net/p/project/category/123/1a2b3
 	//
 	// ---
 	//
@@ -104,7 +111,11 @@ func ExampleFormatComment_summary() {
 	// Comment text
 }
 func ExampleFormatComment_nosummary() {
+	t, _ := time.Parse(time.RFC3339Nano, "2020-09-11T18:38:20.999999999+02:00")
 	vars := CommentFormatterData{
+		Imported: t,
+		Project:  "project",
+		Category: "category",
 		SFTicket: &sfapi.Ticket{
 			CreatedDate: "2001-08-14 16:50:45",
 			TicketNum:   123,
@@ -118,6 +129,7 @@ func ExampleFormatComment_nosummary() {
 			Timestamp: "2002-08-14 16:50:45",
 			Subject:   "#123 Summary",
 			Text:      "Comment text",
+			Slug:      "1a2b3",
 		},
 	}
 
@@ -125,7 +137,9 @@ func ExampleFormatComment_nosummary() {
 
 	fmt.Println(out)
 	// Output:
-	// Created by **author** on 2002-08-14 16:50
+	// Imported from SourceForge on 2020-09-11 18:38
+	// Created by **[author](https://sourceforge.net/u/author/)** on 2002-08-14 16:50
+	// Original: https://sourceforge.net/p/project/category/123/1a2b3
 	//
 	// ---
 	//

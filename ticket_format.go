@@ -31,6 +31,8 @@ Original: https://sourceforge.net/p/{{.Project}}/{{.Category}}/{{.SFTicket.Ticke
 `
 
 type CommentFormatterData struct {
+	Project   string
+	Category  string
 	Imported  time.Time
 	SFComment *sfapi.DiscussionPost
 	SFTicket  *sfapi.Ticket
